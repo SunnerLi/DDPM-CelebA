@@ -77,7 +77,7 @@ def main(
 
                 ### Estimate gaussian posterior q(x_{t-1} | x_t, x_0) = N(x_{t-1}; \mu(x_t, x_0), \beta*I) as shown in eq. 6 in DDPM paper
                 posterior_mean = extract_into_tensor(posterior_mean_coef1, T, x_shape) * pred_x_start + \
-                                    extract_into_tensor(posterior_mean_coef2, T, x_shape) * imgs                           # Refer to eq. 7 in DDPM paper
+                                    extract_into_tensor(posterior_mean_coef2, T, x_shape) * imgs                        # Refer to eq. 7 in DDPM paper
                 posterior_var  = extract_into_tensor(posterior_variance, T, x_shape)                                    # Refer to eq. 7 in DDPM paper
                 posterior_log_var_clipped = extract_into_tensor(posterior_log_variance_clipped, T, x_shape)
                 noise = torch.randn_like(img, device=device) if t > 0 else 0.
