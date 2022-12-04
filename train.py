@@ -1,5 +1,4 @@
 import os
-import sys
 import fire
 import torch
 import random
@@ -36,7 +35,7 @@ def main(
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-        ), batch_size=batch_size, shuffle=True, num_workers=2, drop_last=True,
+        ), batch_size=batch_size, shuffle=True, num_workers=4, drop_last=True,
     )
 
     ### Define model and optimizer
@@ -57,7 +56,7 @@ def main(
 
     ### Calculation for diffusion q(x_t | x_{t-1})
     sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)                                                    # \sqrt_{\bar_\alpha_t}
-    sqrt_one_minus_alpha_cumprod = torch.sqrt(1. - alphas_cumprod)                                      # \sqrt_{1 - \bar_\alpha_t}
+    sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)                                     # \sqrt_{1 - \bar_\alpha_t}
     sqrt_recip_alphas_cumprod = torch.sqrt(1. / alphas_cumprod)                                         # 1 / \sqrt_{\bar_\alpha_t}
     sqrt_recipm1_alphas_cumprod = torch.sqrt(1. / alphas_cumprod - 1)
 
@@ -80,7 +79,7 @@ def main(
 
             ### forward process to sample q(x_t | x_0) in simplified form. Please Refer to Alg. 1 in DDPM paper
             x = extract_into_tensor(sqrt_alphas_cumprod, t, x_start.shape) * x_start + \
-                    extract_into_tensor(sqrt_one_minus_alpha_cumprod, t, x_start.shape) * noise
+                    extract_into_tensor(sqrt_one_minus_alphas_cumprod, t, x_start.shape) * noise
             x = x.float().to(device)
 
             ### feed input into model and compute loss (eq. 14 in DDPM paper)

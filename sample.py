@@ -45,7 +45,7 @@ def main(
 
     ### Calculation for diffusion q(x_t | x_{t-1})
     sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)                                                    # \sqrt_{\bar_\alpha_t}
-    sqrt_one_minus_alpha_cumprod = torch.sqrt(1. - alphas_cumprod)                                      # \sqrt_{1 - \bar_\alpha_t}
+    sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - alphas_cumprod)                                     # \sqrt_{1 - \bar_\alpha_t}
     sqrt_recip_alphas_cumprod = torch.sqrt(1. / alphas_cumprod)                                         # 1 / \sqrt_{\bar_\alpha_t}
     sqrt_recipm1_alphas_cumprod = torch.sqrt(1. / alphas_cumprod - 1)
 
@@ -64,7 +64,7 @@ def main(
         imgs = torch.randn(x_shape, device=device, dtype=torch.float)
         if sample_fn == 'ddpm':
             for t in reversed(range(0, timesteps)):
-                imgs = imgs.float().clamp_(-1., 1.)
+                imgs = imgs.float()
                 T = torch.full((x_shape[0],), t, device=device, dtype=torch.long)
                 pred_noise = model(imgs, T)
 
@@ -80,14 +80,14 @@ def main(
                                     extract_into_tensor(posterior_mean_coef2, T, x_shape) * imgs                        # Refer to eq. 7 in DDPM paper
                 posterior_var  = extract_into_tensor(posterior_variance, T, x_shape)                                    # Refer to eq. 7 in DDPM paper
                 posterior_log_var_clipped = extract_into_tensor(posterior_log_variance_clipped, T, x_shape)
-                noise = torch.randn_like(img, device=device) if t > 0 else 0.
+                noise = torch.randn_like(imgs, device=device) if t > 0 else 0.
                 imgs = posterior_mean + (0.5 * posterior_log_var_clipped).exp() * noise
         elif sample_fn == 'ddim':
             ts = torch.linspace(-1, timesteps - 1, sampling_timesteps + 1)
             ts = list(reversed(ts.int().tolist()))
             ts = list(zip(ts[:-1], ts[1:]))
             for t, t_prev in ts:
-                imgs = imgs.float().clamp_(-1., 1.)
+                imgs = imgs.float()
                 T = torch.full((x_shape[0],), t, device=device, dtype=torch.long)
                 pred_noise = model(imgs, T)
 

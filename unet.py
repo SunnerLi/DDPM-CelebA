@@ -37,8 +37,9 @@ class SinusoidalPositionalEmbedding(nn.Module):
 
     def forward(self, x):
         device = x.device
-        emb = math.log(10000) / (self.dim // 2 - 1)
-        emb = torch.exp(torch.arange(self.dim // 2).to(device) * -emb)
+        half_dim = self.dim // 2
+        emb = math.log(10000) / half_dim 
+        emb = torch.exp(torch.arange(half_dim).to(device) * -emb)
         emb = x[:, None] * emb[None, :]
         emb = torch.cat([emb.sin(), emb.cos()], dim=-1)
         return emb
@@ -51,6 +52,7 @@ class Attention(nn.Module):
         self.to_qkv = nn.Conv2d(dim, dim_head * heads * 3, kernel_size=1, stride=1, bias=False)
         self.to_out = nn.Conv2d(dim_head * heads, dim, kernel_size=1, stride=1)
         self.norm = LayerNorm(dim)
+        # self.norm = nn.GroupNorm(groups, dim)
 
     def forward(self, x):
         b, c, h, w = x.shape
@@ -64,8 +66,35 @@ class Attention(nn.Module):
         out = self.to_out(out)
         return out + x
 
+# class AttentionBlock(nn.Module):
+#     def __init__(self, in_channels, num_groups=32):
+#         super().__init__()
+        
+#         self.in_channels = in_channels
+#         self.norm = nn.GroupNorm(num_groups, in_channels)
+#         self.to_qkv = nn.Conv2d(in_channels, in_channels * 3, 1)
+#         self.to_out = nn.Conv2d(in_channels, in_channels, 1)
+
+#     def forward(self, x):
+#         b, c, h, w = x.shape
+#         q, k, v = torch.split(self.to_qkv(self.norm(x)), self.in_channels, dim=1)
+
+#         q = q.permute(0, 2, 3, 1).view(b, h * w, c)
+#         k = k.view(b, c, h * w)
+#         v = v.permute(0, 2, 3, 1).view(b, h * w, c)
+
+#         dot_products = torch.bmm(q, k) * (c ** (-0.5))
+#         assert dot_products.shape == (b, h * w, h * w)
+
+#         attention = torch.softmax(dot_products, dim=-1)
+#         out = torch.bmm(attention, v)
+#         assert out.shape == (b, h * w, c)
+#         out = out.view(b, h, w, c).permute(0, 3, 1, 2)
+
+#         return self.to_out(out) + x
+
 class Block(nn.Module):
-    def __init__(self, in_channels, out_channels, groups=8) -> None:
+    def __init__(self, in_channels, out_channels, groups=32) -> None:
         super().__init__()
         self.proj = nn.Conv2d(in_channels, out_channels, 3, 1, 1)
         self.norm = nn.GroupNorm(groups, out_channels)
@@ -123,11 +152,13 @@ class UNet(nn.Module):
                 ResBlock(dim_in, dim_in, time_dim),
                 ResBlock(dim_in, dim_in, time_dim),
                 Attention(dim_in),
+                # AttentionBlock(dim_in),
                 Resample(dim_in, dim_out, scale_factor=0.5) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding=1),
             ]))
         
         self.mid_block1 = ResBlock(dim_out, dim_out, time_dim)
         self.mid_attn = Attention(dim_out)
+        # self.mid_attn = AttentionBlock(dim_out)
         self.mid_block2 = ResBlock(dim_out, dim_out, time_dim)
 
         for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):
@@ -136,6 +167,7 @@ class UNet(nn.Module):
                 ResBlock(dim_in + dim_out, dim_out, time_dim),
                 ResBlock(dim_in + dim_out, dim_out, time_dim),
                 Attention(dim_out),
+                # AttentionBlock(dim_out),
                 Resample(dim_out, dim_in, scale_factor=2) if not is_last else nn.Conv2d(dim_out, dim_in, 3, padding=1),
             ]))
 
@@ -167,5 +199,6 @@ class UNet(nn.Module):
             x = attn(x)
             x = upsample(x)
         x += r
+        # x = torch.cat([x, r], dim=1)
         x = self.final_block(x)
         return self.final_conv(x)
