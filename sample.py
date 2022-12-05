@@ -11,11 +11,11 @@ from unet import UNet, extract_into_tensor
 
 @torch.no_grad()
 def main(
-    model_path : str = './cifar10-ddpm/800000.pth', output_folder : str = './cifar10-ddpm/sample',  # Data & IO
-    batch_size : int = 64, device : str = 'cuda', num_sample : int = 64, seed : int = 0,            # Inference basic
-    img_size : int = 32, img_channels : int = 3,                                                    # Image shape
-    timesteps : int = 1000, sampling_timesteps : int = 50, sample_fn : str = 'ddim',                # Diffusion model hyper-parameters
-    grid_form : bool = True,                                                                        # Save format
+    model_path : str = './cifar10-diffusion/800000.pth', output_folder : str = './cifar10-diffusion/sample',            # Data & IO
+    batch_size : int = 64, device : str = 'cuda', num_sample : int = 64, seed : int = 0,                                # Inference basic
+    img_size : int = 32, img_channels : int = 3,                                                                        # Image shape
+    timesteps : int = 1000, sampling_timesteps : int = 50, sample_fn : str = 'ddim', ddim_sampling_eta : float = 1.0,   # Diffusion model hyper-parameters
+    grid_form : bool = True,                                                                                            # Save format
     ):
 
     ### For reproduce result
@@ -105,7 +105,7 @@ def main(
                 ### Generate sample via eq. 12 in DDIM paper page 5 above
                 alpha = alphas_cumprod[t]
                 alpha_prev = alphas_cumprod[t_prev]
-                sigma = ((1 - alpha_prev) / (1 - alpha) * (1 - alpha / alpha_prev)).sqrt()
+                sigma = ddim_sampling_eta * ((1 - alpha_prev) / (1 - alpha) * (1 - alpha / alpha_prev)).sqrt()
                 noise = torch.randn_like(imgs, device=device)
                 imgs = alpha_prev.sqrt() * pred_x_start + (1 - alpha_prev - sigma ** 2).sqrt() * pred_noise + sigma * noise
         else:

@@ -9,7 +9,7 @@ from unet import UNet, extract_into_tensor
 from torchvision import datasets, transforms
 
 def main(
-    data_folder : str = "~/data", output_folder : str = './cifar10-ddpm',           # Data & IO
+    data_folder : str = "~/data", output_folder : str = './cifar10-diffusion',      # Data & IO
     batch_size : int = 32, device : str = 'cuda', seed : int = 0,                   # Training basic
     img_size : int = 32, img_channels : int = 3,                                    # Image shape
     iter_log : int = 500, iter_save : int = 100000, iter_train : int = 800000,      # Time stage
