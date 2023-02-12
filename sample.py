@@ -11,7 +11,7 @@ from unet import UNet, extract_into_tensor
 
 @torch.no_grad()
 def main(
-    model_path : str = './cifar10-diffusion/800000.pth', output_folder : str = './cifar10-diffusion/sample',            # Data & IO
+    model_path : str = './celeba-ddpm-ddim/800000.pth', output_folder : str = './celeba-ddpm-ddim/sample',              # Data & IO
     batch_size : int = 64, device : str = 'cuda', num_sample : int = 64, seed : int = 0,                                # Inference basic
     img_size : int = 32, img_channels : int = 3,                                                                        # Image shape
     timesteps : int = 1000, sampling_timesteps : int = 50, sample_fn : str = 'ddim', ddim_sampling_eta : float = 1.0,   # Diffusion model hyper-parameters
