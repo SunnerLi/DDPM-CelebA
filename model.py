@@ -95,8 +95,10 @@ class ResBlock(nn.Module):
         return h + self.final(x)
 
 class UNet(nn.Module):
-    def __init__(self, in_channels, out_channels, dim, dim_mults=(1, 2, 4, 8)) -> None:
+    def __init__(self, in_channels, out_channels, dim, dim_mults=(1, 2, 4, 8), 
+                    mid_channels: int = None, attention_mid_only: bool = False) -> None:
         super().__init__()
+        self.attention_mid_only = attention_mid_only
 
         time_dim = dim * 4
         dims = [dim * m for m in dim_mults]
@@ -117,10 +119,11 @@ class UNet(nn.Module):
             self.downs.append(nn.ModuleList([
                 ResBlock(dim_in, dim_in, time_dim),
                 ResBlock(dim_in, dim_in, time_dim),
-                AttentionBlock(dim_in),
+                nn.Identity() if self.attention_mid_only else AttentionBlock(dim_in),
                 Resample(dim_in, dim_out, scale_factor=0.5) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding=1),
             ]))
-        
+
+        mid_channels = mid_channels if mid_channels else dim_out
         self.mid_block1 = ResBlock(dim_out, dim_out, time_dim)
         self.mid_attn = AttentionBlock(dim_out)
         self.mid_block2 = ResBlock(dim_out, dim_out, time_dim)
@@ -130,7 +133,7 @@ class UNet(nn.Module):
             self.ups.append(nn.ModuleList([
                 ResBlock(dim_in + dim_out, dim_out, time_dim),
                 ResBlock(dim_in + dim_out, dim_out, time_dim),
-                AttentionBlock(dim_out),
+                nn.Identity() if self.attention_mid_only else AttentionBlock(dim_out),
                 Resample(dim_out, dim_in, scale_factor=2) if not is_last else nn.Conv2d(dim_out, dim_in, 3, padding=1),
             ]))
 
@@ -162,5 +165,102 @@ class UNet(nn.Module):
             x = attn(x)
             x = upsample(x)
         x += r
+        x = self.final_block(x)
+        return self.final_conv(x)
+
+class Encoder(nn.Module):
+    def __init__(self, in_channels, out_channels, dim, dim_mults=(1, 2, 4, 8), 
+                    attention_mid_only: bool = False) -> None:
+        super().__init__()
+        self.attention_mid_only = attention_mid_only
+
+        time_dim = dim * 4
+        dims = [dim * m for m in dim_mults]
+        in_out = list(zip(dims[:-1], dims[1:]))
+
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionalEmbedding(dim),
+            nn.Linear(dim, time_dim),
+            nn.GELU(),
+            nn.Linear(time_dim, time_dim),
+        )
+        self.init_conv = nn.Conv2d(in_channels, dim, 7, padding=3)
+        self.downs = nn.ModuleList([])
+
+        for ind, (dim_in, dim_out) in enumerate(in_out):
+            is_last = ind >= (len(in_out) - 1)
+            self.downs.append(nn.ModuleList([
+                ResBlock(dim_in, dim_in, time_dim),
+                ResBlock(dim_in, dim_in, time_dim),
+                nn.Identity() if self.attention_mid_only else AttentionBlock(dim_in),
+                Resample(dim_in, dim_out, scale_factor=0.5) if not is_last else nn.Conv2d(dim_in, dim_out, 3, padding=1),
+            ]))
+
+        self.mid_block = ResBlock(dim_out, dim_out, time_dim)
+        self.mid_attn = AttentionBlock(dim_out)
+
+        self.final_block = ResBlock(dim_out, dim, time_dim)
+        self.final_conv  = nn.Conv2d(dim, out_channels, 1)
+
+    def forward(self, x, t):
+        if t is not None:
+            t = self.time_mlp(t)
+        x = self.init_conv(x)
+        r = x.clone()
+        for block1, block2, attn, downsample in self.downs:
+            x = block1(x, t)
+            x = block2(x, t)
+            x = attn(x)
+            x = downsample(x)
+
+        x = self.mid_block(x, t)
+        x = self.mid_attn(x)
+        x = self.final_block(x)
+        x = self.final_conv(x)
+
+        return x
+
+class Decoder(nn.Module):
+    def __init__(self, in_channels, out_channels, dim, dim_mults=(1, 2, 4, 8), 
+                    attention_mid_only: bool = False) -> None:
+        super().__init__()
+        self.attention_mid_only = attention_mid_only
+
+        time_dim = dim * 4
+        dims = [dim * m for m in dim_mults]
+        in_out = list(zip(dims[:-1], dims[1:]))
+
+        self.time_mlp = nn.Sequential(
+            SinusoidalPositionalEmbedding(dim),
+            nn.Linear(dim, time_dim),
+            nn.GELU(),
+            nn.Linear(time_dim, time_dim),
+        )
+        self.ups = nn.ModuleList([])
+
+        self.mid_block = ResBlock(in_channels, dim_mults[-1] * dim, time_dim)
+
+        for ind, (dim_in, dim_out) in enumerate(reversed(in_out)):
+            is_last = ind == (len(in_out) - 1)
+            self.ups.append(nn.ModuleList([
+                ResBlock(dim_out, dim_out, time_dim),
+                ResBlock(dim_out, dim_out, time_dim),
+                nn.Identity() if self.attention_mid_only else AttentionBlock(dim_out),
+                Resample(dim_out, dim_in, scale_factor=2) if not is_last else nn.Conv2d(dim_out, dim_in, 3, padding=1),
+            ]))
+
+        self.final_block = ResBlock(dim_in, dim, time_dim)
+        self.final_conv  = nn.Conv2d(dim, out_channels, 1)
+
+    def forward(self, x, t):
+        if t is not None:
+            t = self.time_mlp(t)
+        x = self.mid_block(x, t)
+        for block1, block2, attn, upsample in self.ups:
+            x = block1(x)
+            x = block2(x)
+            x = attn(x)
+            x = upsample(x)
+
         x = self.final_block(x)
         return self.final_conv(x)
